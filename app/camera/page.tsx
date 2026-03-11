@@ -10,48 +10,106 @@ interface Detection {
   bbox: { x: number; y: number; width: number; height: number }
 }
 
-// ✅ 四种病害（与后端保持一致）
-const DISEASE_LABELS = ["玉米灰斑病", "健康", "玉米叶斑病", "玉米锈病"]
+interface ApiDetection {
+  class_name: string
+  class_name_zh: string
+  confidence: number
+  bbox: number[]
+}
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 export default function CameraDetectionPage() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [hasPermission, setHasPermission] = useState<boolean | null>(null)
   const [detections, setDetections] = useState<Detection[]>([])
   const [fps, setFps] = useState(0)
+  const [isDetecting, setIsDetecting] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const animationRef = useRef<number>()
   const lastTimeRef = useRef<number>(0)
   const frameCountRef = useRef<number>(0)
+  const detectingRef = useRef(false)
+  const lastDetectionsRef = useRef<Detection[]>([])
 
-  const generateMockDetection = useCallback((): Detection | null => {
-    if (Math.random() > 0.3) {
-      return {
-        label: DISEASE_LABELS[Math.floor(Math.random() * DISEASE_LABELS.length)],
-        confidence: 0.75 + Math.random() * 0.2,
-        bbox: {
-          x: 50 + Math.random() * 200,
-          y: 50 + Math.random() * 150,
-          width: 100 + Math.random() * 100,
-          height: 120 + Math.random() * 100,
-        },
-      }
-    }
-    return null
-  }, [])
-
-  const drawFrame = useCallback(() => {
+  const captureFrame = (): string | null => {
     const video = videoRef.current
     const canvas = canvasRef.current
+    if (!video || !canvas) return null
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return null
+    canvas.width = video.videoWidth || 640
+    canvas.height = video.videoHeight || 480
+    ctx.drawImage(video, 0, 0)
+    return canvas.toDataURL("image/jpeg", 0.7).split(",")[1]
+  }
+
+  const sendFrameToBackend = useCallback(async () => {
+    if (detectingRef.current) return
+    detectingRef.current = true
+    setIsDetecting(true)
+
+    try {
+      const base64 = captureFrame()
+      if (!base64) return
+
+      const response = await fetch(`${API_BASE}/camera_frame`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+        },
+        body: JSON.stringify({ image: base64, run_diagnosis: false }),
+      })
+
+      if (!response.ok) return
+
+      const data = await response.json()
+      const parsed: Detection[] = (data.detections || []).map((d: ApiDetection) => ({
+        label: d.class_name_zh || d.class_name,
+        confidence: d.confidence,
+        bbox: { x: d.bbox[0], y: d.bbox[1], width: d.bbox[2], height: d.bbox[3] },
+      }))
+
+      lastDetectionsRef.current = parsed
+      setDetections(parsed)
+    } catch {
+      // 静默失败，继续下一帧
+    } finally {
+      detectingRef.current = false
+      setIsDetecting(false)
+    }
+  }, [])
+
+  const drawOverlay = useCallback(() => {
+    const video = videoRef.current
+    const canvas = overlayCanvasRef.current
     if (!video || !canvas || !isStreaming) return
 
     const ctx = canvas.getContext("2d")
     if (!ctx) return
 
-    canvas.width = video.videoWidth
-    canvas.height = video.videoHeight
-    ctx.drawImage(video, 0, 0)
+    canvas.width = video.videoWidth || 640
+    canvas.height = video.videoHeight || 480
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    lastDetectionsRef.current.forEach((det) => {
+      ctx.strokeStyle = "#4ade80"
+      ctx.lineWidth = 3
+      ctx.strokeRect(det.bbox.x, det.bbox.y, det.bbox.width, det.bbox.height)
+
+      const labelText = `${det.label} ${(det.confidence * 100).toFixed(0)}%`
+      ctx.font = "bold 14px Inter, sans-serif"
+      const textWidth = ctx.measureText(labelText).width
+      ctx.fillStyle = "rgba(74, 222, 128, 0.9)"
+      ctx.fillRect(det.bbox.x, det.bbox.y - 24, textWidth + 12, 24)
+      ctx.fillStyle = "#000"
+      ctx.fillText(labelText, det.bbox.x + 6, det.bbox.y - 7)
+    })
 
     frameCountRef.current++
     const now = performance.now()
@@ -59,35 +117,12 @@ export default function CameraDetectionPage() {
       setFps(frameCountRef.current)
       frameCountRef.current = 0
       lastTimeRef.current = now
-
-      const mockDet = generateMockDetection()
-      if (mockDet) setDetections([mockDet])
-      else setDetections([])
+      // 每秒发送一帧给后端
+      sendFrameToBackend()
     }
 
-    detections.forEach((det) => {
-      const scaleX = canvas.width / 640
-      const scaleY = canvas.height / 480
-
-      ctx.strokeStyle = "#4ade80"
-      ctx.lineWidth = 3
-      ctx.strokeRect(det.bbox.x * scaleX, det.bbox.y * scaleY, det.bbox.width * scaleX, det.bbox.height * scaleY)
-
-      const scanY = (Date.now() % 2000) / 2000 * det.bbox.height
-      ctx.fillStyle = "rgba(74, 222, 128, 0.3)"
-      ctx.fillRect(det.bbox.x * scaleX, (det.bbox.y + scanY) * scaleY, det.bbox.width * scaleX, 4)
-
-      const labelText = `${det.label} ${(det.confidence * 100).toFixed(0)}%`
-      ctx.font = "bold 14px Inter, sans-serif"
-      const textWidth = ctx.measureText(labelText).width
-      ctx.fillStyle = "rgba(74, 222, 128, 0.9)"
-      ctx.fillRect(det.bbox.x * scaleX, det.bbox.y * scaleY - 24, textWidth + 12, 24)
-      ctx.fillStyle = "#000"
-      ctx.fillText(labelText, det.bbox.x * scaleX + 6, det.bbox.y * scaleY - 7)
-    })
-
-    animationRef.current = requestAnimationFrame(drawFrame)
-  }, [isStreaming, detections, generateMockDetection])
+    animationRef.current = requestAnimationFrame(drawOverlay)
+  }, [isStreaming, sendFrameToBackend])
 
   const startCamera = async () => {
     try {
@@ -113,13 +148,14 @@ export default function CameraDetectionPage() {
     if (animationRef.current) cancelAnimationFrame(animationRef.current)
     setIsStreaming(false)
     setDetections([])
+    lastDetectionsRef.current = []
     setFps(0)
   }
 
   useEffect(() => {
-    if (isStreaming) animationRef.current = requestAnimationFrame(drawFrame)
+    if (isStreaming) animationRef.current = requestAnimationFrame(drawOverlay)
     return () => { if (animationRef.current) cancelAnimationFrame(animationRef.current) }
-  }, [isStreaming, drawFrame])
+  }, [isStreaming, drawOverlay])
 
   useEffect(() => { return () => { stopCamera() } }, [])
 
@@ -153,6 +189,9 @@ export default function CameraDetectionPage() {
                         <span className="text-red-400">直播中</span>
                       </span>
                       <span className="text-sm text-muted-foreground font-mono">{fps} FPS</span>
+                      {isDetecting && (
+                        <span className="text-xs text-primary animate-pulse">检测中...</span>
+                      )}
                     </>
                   )}
                 </div>
@@ -162,9 +201,12 @@ export default function CameraDetectionPage() {
                 <video ref={videoRef} autoPlay playsInline muted
                   className="absolute inset-0 w-full h-full object-cover"
                   style={{ display: isStreaming ? "block" : "none" }}
-                  onPlay={() => { animationRef.current = requestAnimationFrame(drawFrame) }}
                 />
-                <canvas ref={canvasRef} className="absolute inset-0 w-full h-full object-cover"
+                {/* 隐藏的捕帧 canvas */}
+                <canvas ref={canvasRef} className="hidden" />
+                {/* 检测框叠加层 */}
+                <canvas ref={overlayCanvasRef}
+                  className="absolute inset-0 w-full h-full object-cover pointer-events-none"
                   style={{ display: isStreaming ? "block" : "none" }}
                 />
 

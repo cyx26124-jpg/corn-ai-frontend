@@ -10,8 +10,14 @@ interface Detection {
   confidence: number
 }
 
-// ✅ 四种病害（与后端保持一致）
-const DISEASE_LABELS = ["玉米灰斑病", "健康", "玉米叶斑病", "玉米锈病"]
+interface ApiDetection {
+  class_name: string
+  class_name_zh: string
+  confidence: number
+  bbox: number[]
+}
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 export default function VideoDetectionPage() {
   const [videoSrc, setVideoSrc] = useState<string | null>(null)
@@ -20,45 +26,105 @@ export default function VideoDetectionPage() {
   const [detections, setDetections] = useState<Detection[]>([])
   const [isDragOver, setIsDragOver] = useState(false)
   const [stats, setStats] = useState({ totalFrames: 0, detectedFrames: 0, avgConfidence: 0 })
+  const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
 
-  const processVideo = useCallback((file: File) => {
+  const extractFrames = (video: HTMLVideoElement, totalFrames: number): Promise<string[]> => {
+    return new Promise((resolve) => {
+      const canvas = canvasRef.current || document.createElement("canvas")
+      const ctx = canvas.getContext("2d")!
+      const frames: string[] = []
+      const duration = video.duration
+      const interval = duration / totalFrames
+      let currentIndex = 0
+
+      canvas.width = video.videoWidth || 640
+      canvas.height = video.videoHeight || 480
+
+      const captureFrame = () => {
+        if (currentIndex >= totalFrames) {
+          resolve(frames)
+          return
+        }
+        video.currentTime = currentIndex * interval
+      }
+
+      video.onseeked = () => {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        frames.push(canvas.toDataURL("image/jpeg", 0.6).split(",")[1])
+        currentIndex++
+        captureFrame()
+      }
+
+      captureFrame()
+    })
+  }
+
+  const processVideo = useCallback(async (file: File) => {
     const url = URL.createObjectURL(file)
     setVideoSrc(url)
     setIsProcessing(true)
     setProgress(0)
     setDetections([])
+    setError(null)
 
-    const totalFrames = 120
-    let currentFrame = 0
-    const mockDetections: Detection[] = []
+    try {
+      // 等待视频元数据加载
+      const video = videoRef.current!
+      await new Promise<void>((resolve) => {
+        video.onloadedmetadata = () => resolve()
+        video.src = url
+      })
 
-    const processFrame = () => {
-      currentFrame++
-      setProgress((currentFrame / totalFrames) * 100)
+      const SAMPLE_FRAMES = 20 // 每个视频抽取20帧送检
+      const allDetections: Detection[] = []
 
-      if (Math.random() > 0.6) {
-        mockDetections.push({
-          frame: currentFrame,
-          label: DISEASE_LABELS[Math.floor(Math.random() * DISEASE_LABELS.length)],
-          confidence: 0.7 + Math.random() * 0.25,
-        })
+      const frames = await extractFrames(video, SAMPLE_FRAMES)
+
+      for (let i = 0; i < frames.length; i++) {
+        setProgress(((i + 1) / frames.length) * 100)
+
+        try {
+          const response = await fetch(`${API_BASE}/camera_frame`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "ngrok-skip-browser-warning": "true",
+            },
+            body: JSON.stringify({ image: frames[i], run_diagnosis: false }),
+          })
+
+          if (response.ok) {
+            const data = await response.json()
+            ;(data.detections || []).forEach((d: ApiDetection) => {
+              allDetections.push({
+                frame: i + 1,
+                label: d.class_name_zh || d.class_name,
+                confidence: d.confidence,
+              })
+            })
+          }
+        } catch {
+          // 某帧失败继续
+        }
       }
 
-      if (currentFrame < totalFrames) {
-        setTimeout(processFrame, 30)
-      } else {
-        setIsProcessing(false)
-        setDetections(mockDetections)
-        const avgConf = mockDetections.length > 0
-          ? mockDetections.reduce((sum, d) => sum + d.confidence, 0) / mockDetections.length
-          : 0
-        setStats({ totalFrames, detectedFrames: mockDetections.length, avgConfidence: avgConf })
-      }
+      setDetections(allDetections)
+      const avgConf = allDetections.length > 0
+        ? allDetections.reduce((sum, d) => sum + d.confidence, 0) / allDetections.length
+        : 0
+      setStats({
+        totalFrames: SAMPLE_FRAMES,
+        detectedFrames: allDetections.length,
+        avgConfidence: avgConf,
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "视频处理失败")
+    } finally {
+      setIsProcessing(false)
     }
-
-    setTimeout(processFrame, 100)
   }, [])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -78,6 +144,7 @@ export default function VideoDetectionPage() {
     setVideoSrc(null)
     setDetections([])
     setProgress(0)
+    setError(null)
     setStats({ totalFrames: 0, detectedFrames: 0, avgConfidence: 0 })
     if (fileInputRef.current) fileInputRef.current.value = ""
   }
@@ -92,6 +159,8 @@ export default function VideoDetectionPage() {
     <div className="min-h-screen relative">
       <ParticlesBackground />
       <NavHeader />
+      {/* 隐藏的帧提取 canvas */}
+      <canvas ref={canvasRef} className="hidden" />
 
       <main className="relative z-10 pt-24 pb-16 px-4 sm:px-6 lg:px-8 page-transition">
         <div className="max-w-6xl mx-auto">
@@ -151,6 +220,12 @@ export default function VideoDetectionPage() {
                       </div>
                     </div>
                   )}
+
+                  {error && (
+                    <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                      ⚠️ {error}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -172,7 +247,7 @@ export default function VideoDetectionPage() {
                 <div className="text-center py-12">
                   <div className="w-12 h-12 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
                   <p className="text-primary font-medium">YOLOv26 正在分析视频...</p>
-                  <p className="text-sm text-muted-foreground mt-2">这可能需要一些时间</p>
+                  <p className="text-sm text-muted-foreground mt-2">逐帧发送后端检测中</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -191,20 +266,26 @@ export default function VideoDetectionPage() {
                     </div>
                   </div>
 
-                  <div className="space-y-3">
-                    <h3 className="text-sm font-medium text-foreground">病害分布</h3>
-                    {Object.entries(groupedDetections).map(([label, dets]) => (
-                      <div key={label} className="p-3 rounded-xl bg-secondary/30 border border-border">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-foreground">{label}</span>
-                          <span className="text-xs text-primary">{dets.length} 次检测</span>
+                  {Object.keys(groupedDetections).length > 0 ? (
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-medium text-foreground">病害分布</h3>
+                      {Object.entries(groupedDetections).map(([label, dets]) => (
+                        <div key={label} className="p-3 rounded-xl bg-secondary/30 border border-border">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-foreground">{label}</span>
+                            <span className="text-xs text-primary">{dets.length} 次检测</span>
+                          </div>
+                          <div className="w-full bg-secondary rounded-full h-1.5">
+                            <div className="bg-primary h-1.5 rounded-full" style={{ width: `${(dets.length / stats.detectedFrames) * 100}%` }} />
+                          </div>
                         </div>
-                        <div className="w-full bg-secondary rounded-full h-1.5">
-                          <div className="bg-primary h-1.5 rounded-full" style={{ width: `${(dets.length / stats.detectedFrames) * 100}%` }} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-4 text-muted-foreground text-sm">
+                      未检测到病害
+                    </div>
+                  )}
 
                   <button onClick={() => window.location.href = "/diagnosis"} className="w-full mt-4 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all duration-300">
                     查看病害详情

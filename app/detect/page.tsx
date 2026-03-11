@@ -10,36 +10,24 @@ interface Detection {
   bbox: { x: number; y: number; width: number; height: number }
 }
 
-// ✅ 四种病害 mock 数据
-const mockDetections: Detection[] = [
-  { label: "玉米灰斑病", confidence: 0.94, bbox: { x: 120, y: 80, width: 180, height: 220 } },
-  { label: "玉米锈病",   confidence: 0.87, bbox: { x: 320, y: 150, width: 140, height: 160 } },
-]
+interface ApiDetection {
+  class_name: string
+  class_name_zh: string
+  confidence: number
+  bbox: number[]
+}
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 export default function ImageDetectionPage() {
   const [image, setImage] = useState<string | null>(null)
   const [detections, setDetections] = useState<Detection[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
   const [isDragOver, setIsDragOver] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-
-  const processImage = useCallback((file: File) => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      const result = e.target?.result as string
-      setImage(result)
-      setIsProcessing(true)
-      setDetections([])
-
-      setTimeout(() => {
-        setDetections(mockDetections)
-        setIsProcessing(false)
-        drawDetections(result, mockDetections)
-      }, 1500)
-    }
-    reader.readAsDataURL(file)
-  }, [])
+  const currentFileRef = useRef<File | null>(null)
 
   const drawDetections = (imageSrc: string, dets: Detection[]) => {
     const canvas = canvasRef.current
@@ -71,6 +59,55 @@ export default function ImageDetectionPage() {
     img.src = imageSrc
   }
 
+  const processImage = useCallback(async (file: File) => {
+    currentFileRef.current = file
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      const result = e.target?.result as string
+      setImage(result)
+      setIsProcessing(true)
+      setDetections([])
+      setError(null)
+
+      try {
+        const formData = new FormData()
+        formData.append("file", file)
+
+        const response = await fetch(`${API_BASE}/detect`, {
+          method: "POST",
+          headers: { "ngrok-skip-browser-warning": "true" },
+          body: formData,
+        })
+
+        if (!response.ok) {
+          throw new Error(`服务器错误: ${response.status}`)
+        }
+
+        const data = await response.json()
+
+        // 后端返回 detections 数组
+        const parsed: Detection[] = (data.detections || []).map((d: ApiDetection) => ({
+          label: d.class_name_zh || d.class_name,
+          confidence: d.confidence,
+          bbox: {
+            x: d.bbox[0],
+            y: d.bbox[1],
+            width: d.bbox[2],
+            height: d.bbox[3],
+          },
+        }))
+
+        setDetections(parsed)
+        drawDetections(result, parsed)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "检测失败，请检查后端服务是否运行")
+      } finally {
+        setIsProcessing(false)
+      }
+    }
+    reader.readAsDataURL(file)
+  }, [])
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     setIsDragOver(false)
@@ -88,6 +125,7 @@ export default function ImageDetectionPage() {
   const resetDetection = () => {
     setImage(null)
     setDetections([])
+    setError(null)
     if (fileInputRef.current) fileInputRef.current.value = ""
   }
 
@@ -156,16 +194,24 @@ export default function ImageDetectionPage() {
             <div className="glass-card rounded-2xl p-6">
               <h2 className="text-xl font-semibold text-foreground mb-4">检测结果</h2>
 
-              {detections.length === 0 ? (
+              {error && (
+                <div className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                  ⚠️ {error}
+                </div>
+              )}
+
+              {detections.length === 0 && !error ? (
                 <div className="text-center py-12">
                   <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-secondary/50 flex items-center justify-center">
                     <svg className="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                     </svg>
                   </div>
-                  <p className="text-muted-foreground">请上传图像以查看检测结果</p>
+                  <p className="text-muted-foreground">
+                    {isProcessing ? "正在检测中..." : "请上传图像以查看检测结果"}
+                  </p>
                 </div>
-              ) : (
+              ) : detections.length > 0 ? (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between text-sm mb-4">
                     <span className="text-muted-foreground">发现 {detections.length} 个检测目标</span>
@@ -197,7 +243,7 @@ export default function ImageDetectionPage() {
                     查看详细诊断
                   </button>
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
         </div>
