@@ -10,6 +10,13 @@ interface Detection {
   bbox: { x: number; y: number; width: number; height: number }
 }
 
+interface ApiDetection {
+  disease: string
+  confidence: number
+  bbox: number[]
+  class_id?: number
+}
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 export default function CameraDetectionPage() {
@@ -17,73 +24,39 @@ export default function CameraDetectionPage() {
   const [hasPermission, setHasPermission] = useState<boolean | null>(null)
   const [detections, setDetections] = useState<Detection[]>([])
   const [fps, setFps] = useState(0)
-  const [status, setStatus] = useState<"idle" | "detecting" | "error">("idle")
-  const [errorMsg, setErrorMsg] = useState("")
-  const [lastDetectTime, setLastDetectTime] = useState<string>("")
-
+  const [isDetecting, setIsDetecting] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const captureRef = useRef<HTMLCanvasElement>(null)
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const animationRef = useRef<number>()
-  const detectTimerRef = useRef<ReturnType<typeof setInterval>>()
-  const isDetectingRef = useRef(false)
-  const detectionsRef = useRef<Detection[]>([])
-  const fpsCountRef = useRef(0)
-  const fpsTimerRef = useRef<ReturnType<typeof setInterval>>()
+  const lastTimeRef = useRef<number>(0)
+  const frameCountRef = useRef<number>(0)
+  const detectingRef = useRef(false)
+  const lastDetectionsRef = useRef<Detection[]>([])
 
-  // 每帧渲染：把视频画到 canvas，然后叠加检测框
-  const renderLoop = useCallback(() => {
+  const captureFrame = (): string | null => {
     const video = videoRef.current
     const canvas = canvasRef.current
-    if (!video || !canvas) return
+    if (!video || !canvas) return null
     const ctx = canvas.getContext("2d")
-    if (!ctx) return
+    if (!ctx) return null
+    canvas.width = video.videoWidth || 640
+    canvas.height = video.videoHeight || 480
+    ctx.drawImage(video, 0, 0)
+    return canvas.toDataURL("image/jpeg", 0.7).split(",")[1]
+  }
 
-    if (video.readyState >= 2) {
-      canvas.width = video.videoWidth || 640
-      canvas.height = video.videoHeight || 480
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-
-      detectionsRef.current.forEach((det) => {
-        const { x, y, width, height } = det.bbox
-        ctx.strokeStyle = "#4ade80"
-        ctx.lineWidth = 3
-        ctx.strokeRect(x, y, width, height)
-
-        const label = `${det.label}  ${(det.confidence * 100).toFixed(1)}%`
-        ctx.font = "bold 15px sans-serif"
-        const tw = ctx.measureText(label).width
-        ctx.fillStyle = "rgba(0,0,0,0.75)"
-        ctx.fillRect(x, y - 28, tw + 14, 28)
-        ctx.fillStyle = "#4ade80"
-        ctx.fillText(label, x + 7, y - 8)
-      })
-    }
-
-    fpsCountRef.current++
-    animationRef.current = requestAnimationFrame(renderLoop)
-  }, [])
-
-  // 截帧并发送给后端
-  const detectOnce = useCallback(async () => {
-    if (isDetectingRef.current) return
-    const video = videoRef.current
-    const capture = captureRef.current
-    if (!video || !capture || video.readyState < 2) return
-
-    isDetectingRef.current = true
-    setStatus("detecting")
+  const sendFrameToBackend = useCallback(async () => {
+    if (detectingRef.current) return
+    detectingRef.current = true
+    setIsDetecting(true)
 
     try {
-      capture.width = video.videoWidth || 640
-      capture.height = video.videoHeight || 480
-      const ctx = capture.getContext("2d")!
-      ctx.drawImage(video, 0, 0, capture.width, capture.height)
-      const base64 = capture.toDataURL("image/jpeg", 0.8).split(",")[1]
+      const base64 = captureFrame()
+      if (!base64) return
 
-      // 先用 image 字段，422 则改用 frame 字段
-      let response = await fetch(`${API_BASE}/camera_frame`, {
+      const response = await fetch(`${API_BASE}/camera_frame`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -92,157 +65,148 @@ export default function CameraDetectionPage() {
         body: JSON.stringify({ image: base64, run_diagnosis: false }),
       })
 
-      if (response.status === 422) {
-        response = await fetch(`${API_BASE}/camera_frame`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "ngrok-skip-browser-warning": "true",
-          },
-          body: JSON.stringify({ frame: base64, run_diagnosis: false }),
-        })
-      }
-
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      if (!response.ok) return
 
       const data = await response.json()
-      const rawDets = data.detections || data.results || []
+      const parsed: Detection[] = (data.detections || []).map((d: ApiDetection) => ({
+        label: d.disease,
+        confidence: d.confidence,
+        bbox: { x: d.bbox[0], y: d.bbox[1], width: d.bbox[2], height: d.bbox[3] },
+      }))
 
-      const parsed: Detection[] = rawDets.map((d: Record<string, unknown>) => {
-        const bbox = (d.bbox as number[]) || [0, 0, 100, 100]
-        return {
-          label: (d.disease || d.class_name_zh || d.class_name || d.label || "未知") as string,
-          confidence: (d.confidence as number) || 0,
-          bbox: { x: bbox[0], y: bbox[1], width: bbox[2], height: bbox[3] },
-        }
-      })
-
-      detectionsRef.current = parsed
+      lastDetectionsRef.current = parsed
       setDetections(parsed)
-      setStatus("idle")
-      setLastDetectTime(new Date().toLocaleTimeString())
-      setErrorMsg("")
-    } catch (err) {
-      setStatus("error")
-      setErrorMsg(err instanceof Error ? err.message : "检测失败")
-      detectionsRef.current = []
-      setDetections([])
+    } catch {
+      // 静默失败，继续下一帧
     } finally {
-      isDetectingRef.current = false
+      detectingRef.current = false
+      setIsDetecting(false)
     }
   }, [])
 
+  const drawOverlay = useCallback(() => {
+    const video = videoRef.current
+    const canvas = overlayCanvasRef.current
+    if (!video || !canvas || !isStreaming) return
+
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+
+    canvas.width = video.videoWidth || 640
+    canvas.height = video.videoHeight || 480
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    lastDetectionsRef.current.forEach((det) => {
+      ctx.strokeStyle = "#4ade80"
+      ctx.lineWidth = 3
+      ctx.strokeRect(det.bbox.x, det.bbox.y, det.bbox.width, det.bbox.height)
+
+      const labelText = `${det.label} ${(det.confidence * 100).toFixed(0)}%`
+      ctx.font = "bold 14px Inter, sans-serif"
+      const textWidth = ctx.measureText(labelText).width
+      ctx.fillStyle = "rgba(74, 222, 128, 0.9)"
+      ctx.fillRect(det.bbox.x, det.bbox.y - 24, textWidth + 12, 24)
+      ctx.fillStyle = "#000"
+      ctx.fillText(labelText, det.bbox.x + 6, det.bbox.y - 7)
+    })
+
+    frameCountRef.current++
+    const now = performance.now()
+    if (now - lastTimeRef.current >= 1000) {
+      setFps(frameCountRef.current)
+      frameCountRef.current = 0
+      lastTimeRef.current = now
+      // 每秒发送一帧给后端
+      sendFrameToBackend()
+    }
+
+    animationRef.current = requestAnimationFrame(drawOverlay)
+  }, [isStreaming, sendFrameToBackend])
+
   const startCamera = async () => {
-    setErrorMsg("")
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 640 }, height: { ideal: 480 } },
-        audio: false,
+        video: { facingMode: "environment", width: 640, height: 480 },
       })
-      const video = videoRef.current!
-      video.srcObject = stream
-      streamRef.current = stream
-      await video.play()
-      setIsStreaming(true)
-      setHasPermission(true)
-    } catch (e) {
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        streamRef.current = stream
+        setIsStreaming(true)
+        setHasPermission(true)
+      }
+    } catch {
       setHasPermission(false)
-      setErrorMsg("无法访问摄像头：" + (e instanceof Error ? e.message : String(e)))
     }
   }
 
-  const stopCamera = useCallback(() => {
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
+    }
     if (animationRef.current) cancelAnimationFrame(animationRef.current)
-    if (detectTimerRef.current) clearInterval(detectTimerRef.current)
-    if (fpsTimerRef.current) clearInterval(fpsTimerRef.current)
-    streamRef.current?.getTracks().forEach((t) => t.stop())
-    streamRef.current = null
-    detectionsRef.current = []
     setIsStreaming(false)
     setDetections([])
+    lastDetectionsRef.current = []
     setFps(0)
-    setStatus("idle")
-  }, [])
+  }
 
   useEffect(() => {
-    if (!isStreaming) return
+    if (isStreaming) animationRef.current = requestAnimationFrame(drawOverlay)
+    return () => { if (animationRef.current) cancelAnimationFrame(animationRef.current) }
+  }, [isStreaming, drawOverlay])
 
-    animationRef.current = requestAnimationFrame(renderLoop)
-
-    detectTimerRef.current = setInterval(() => {
-      detectOnce()
-    }, 1500)
-
-    fpsTimerRef.current = setInterval(() => {
-      setFps(fpsCountRef.current)
-      fpsCountRef.current = 0
-    }, 1000)
-
-    return () => {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current)
-      if (detectTimerRef.current) clearInterval(detectTimerRef.current)
-      if (fpsTimerRef.current) clearInterval(fpsTimerRef.current)
-    }
-  }, [isStreaming, renderLoop, detectOnce])
-
-  useEffect(() => () => stopCamera(), [stopCamera])
+  useEffect(() => { return () => { stopCamera() } }, [])
 
   return (
     <div className="min-h-screen relative">
       <ParticlesBackground />
       <NavHeader />
-      <canvas ref={captureRef} className="hidden" />
 
       <main className="relative z-10 pt-24 pb-16 px-4 sm:px-6 lg:px-8 page-transition">
         <div className="max-w-6xl mx-auto">
-
           <div className="text-center mb-8">
             <h1 className="text-4xl md:text-5xl font-bold mb-4">
               <span className="text-foreground">摄像头</span>{" "}
               <span className="text-primary neon-text">检测</span>
             </h1>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              使用设备摄像头进行实时玉米病害检测，AI 每 1.5 秒分析一次
+              使用设备摄像头进行实时玉米病害检测，AI实时分析
             </p>
           </div>
 
           <div className="grid lg:grid-cols-3 gap-8">
-
-            {/* 摄像头画面 */}
+            {/* Camera View */}
             <div className="lg:col-span-2 glass-card rounded-2xl p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-semibold text-foreground">实时画面</h2>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-4">
                   {isStreaming && (
                     <>
-                      <span className="flex items-center gap-1.5 text-sm">
+                      <span className="flex items-center gap-2 text-sm">
                         <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                         <span className="text-red-400">直播中</span>
                       </span>
                       <span className="text-sm text-muted-foreground font-mono">{fps} FPS</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
-                        status === "detecting" ? "bg-yellow-500/20 text-yellow-400 animate-pulse" :
-                        status === "error"     ? "bg-red-500/20 text-red-400" :
-                        "bg-primary/20 text-primary"
-                      }`}>
-                        {status === "detecting" ? "检测中..." : status === "error" ? "⚠ 错误" : "就绪"}
-                      </span>
+                      {isDetecting && (
+                        <span className="text-xs text-primary animate-pulse">检测中...</span>
+                      )}
                     </>
                   )}
                 </div>
               </div>
 
               <div className="relative aspect-video bg-secondary/30 rounded-xl overflow-hidden">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="absolute inset-0 w-full h-full object-cover opacity-0 pointer-events-none"
-                />
-                <canvas
-                  ref={canvasRef}
+                <video ref={videoRef} autoPlay playsInline muted
                   className="absolute inset-0 w-full h-full object-cover"
+                  style={{ display: isStreaming ? "block" : "none" }}
+                />
+                {/* 隐藏的捕帧 canvas */}
+                <canvas ref={canvasRef} className="hidden" />
+                {/* 检测框叠加层 */}
+                <canvas ref={overlayCanvasRef}
+                  className="absolute inset-0 w-full h-full object-cover pointer-events-none"
                   style={{ display: isStreaming ? "block" : "none" }}
                 />
 
@@ -256,8 +220,8 @@ export default function CameraDetectionPage() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
                             </svg>
                           </div>
-                          <p className="text-foreground font-medium mb-1">摄像头访问被拒绝</p>
-                          <p className="text-sm text-muted-foreground">{errorMsg || "请在浏览器设置中开启权限"}</p>
+                          <p className="text-foreground font-medium mb-2">摄像头访问被拒绝</p>
+                          <p className="text-sm text-muted-foreground">请启用摄像头权限</p>
                         </>
                       ) : (
                         <>
@@ -266,8 +230,8 @@ export default function CameraDetectionPage() {
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                             </svg>
                           </div>
-                          <p className="text-foreground font-medium mb-1">摄像头已就绪</p>
-                          <p className="text-sm text-muted-foreground">点击下方按钮开始检测</p>
+                          <p className="text-foreground font-medium mb-2">摄像头已就绪</p>
+                          <p className="text-sm text-muted-foreground">点击开始按钮启动检测</p>
                         </>
                       )}
                     </div>
@@ -275,81 +239,53 @@ export default function CameraDetectionPage() {
                 )}
               </div>
 
-              {errorMsg && isStreaming && (
-                <div className="mt-3 px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
-                  ⚠ {errorMsg}
-                </div>
-              )}
-
-              <div className="flex justify-center mt-6">
+              <div className="flex justify-center gap-4 mt-6">
                 {!isStreaming ? (
-                  <button
-                    onClick={startCamera}
-                    className="px-8 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all duration-300 hover:scale-105 neon-border"
-                  >
+                  <button onClick={startCamera} className="px-8 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all duration-300 hover:scale-105 neon-border">
                     启动摄像头
                   </button>
                 ) : (
-                  <button
-                    onClick={stopCamera}
-                    className="px-8 py-3 rounded-xl bg-destructive text-destructive-foreground font-semibold hover:bg-destructive/90 transition-all duration-300"
-                  >
+                  <button onClick={stopCamera} className="px-8 py-3 rounded-xl bg-destructive text-destructive-foreground font-semibold hover:bg-destructive/90 transition-all duration-300">
                     停止摄像头
                   </button>
                 )}
               </div>
             </div>
 
-            {/* 检测结果面板 */}
-            <div className="glass-card rounded-2xl p-6 flex flex-col">
-              <h2 className="text-xl font-semibold text-foreground mb-4">实时检测结果</h2>
+            {/* Detection Panel */}
+            <div className="glass-card rounded-2xl p-6">
+              <h2 className="text-xl font-semibold text-foreground mb-4">实时检测</h2>
 
               {detections.length === 0 ? (
-                <div className="flex-1 flex flex-col items-center justify-center py-8 text-center">
+                <div className="text-center py-8">
                   <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-secondary/50 flex items-center justify-center">
                     <svg className="w-6 h-6 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {isStreaming ? "正在扫描，请将玉米叶片对准摄像头..." : "启动摄像头开始检测"}
+                    {isStreaming ? "正在扫描病害..." : "启动摄像头开始检测"}
                   </p>
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {detections.map((det, i) => (
-                    <div key={i} className="p-4 rounded-xl bg-secondary/30 border border-primary/30">
+                  {detections.map((det, index) => (
+                    <div key={index} className="p-4 rounded-xl bg-secondary/30 border border-primary/30">
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-medium text-foreground text-sm">{det.label}</span>
-                        <span className={`px-2 py-1 rounded text-xs font-bold ${
-                          det.confidence > 0.85 ? "bg-primary/20 text-primary" :
-                          det.confidence > 0.65 ? "bg-yellow-500/20 text-yellow-400" :
-                          "bg-red-500/20 text-red-400"
-                        }`}>
-                          {(det.confidence * 100).toFixed(1)}%
+                        <span className="px-2 py-1 rounded text-xs font-medium bg-primary/20 text-primary">
+                          {(det.confidence * 100).toFixed(0)}%
                         </span>
                       </div>
                       <div className="w-full bg-secondary rounded-full h-1.5">
-                        <div
-                          className="bg-primary h-1.5 rounded-full transition-all duration-300"
-                          style={{ width: `${det.confidence * 100}%` }}
-                        />
-                      </div>
-                      <div className="mt-1.5 text-xs text-muted-foreground font-mono">
-                        框: [{det.bbox.x.toFixed(0)}, {det.bbox.y.toFixed(0)}, {det.bbox.width.toFixed(0)}, {det.bbox.height.toFixed(0)}]
+                        <div className="bg-primary h-1.5 rounded-full" style={{ width: `${det.confidence * 100}%` }} />
                       </div>
                     </div>
                   ))}
                 </div>
               )}
 
-              {lastDetectTime && (
-                <p className="mt-3 text-xs text-muted-foreground text-center">
-                  最近检测：{lastDetectTime}
-                </p>
-              )}
-
-              <div className="mt-4 p-4 rounded-xl bg-secondary/20 border border-border">
+              <div className="mt-6 p-4 rounded-xl bg-secondary/20 border border-border">
                 <h3 className="text-sm font-medium text-foreground mb-2">可检测病害</h3>
                 <ul className="text-xs text-muted-foreground space-y-1">
                   <li>🟡 玉米灰斑病</li>
@@ -359,7 +295,6 @@ export default function CameraDetectionPage() {
                 </ul>
               </div>
             </div>
-
           </div>
         </div>
       </main>
