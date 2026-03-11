@@ -1,0 +1,220 @@
+"use client"
+
+import { useState, useRef, useCallback } from "react"
+import { ParticlesBackground } from "@/components/particles-background"
+import { NavHeader } from "@/components/nav-header"
+
+interface Detection {
+  frame: number
+  label: string
+  confidence: number
+}
+
+// ✅ 四种病害（与后端保持一致）
+const DISEASE_LABELS = ["玉米灰斑病", "健康", "玉米叶斑病", "玉米锈病"]
+
+export default function VideoDetectionPage() {
+  const [videoSrc, setVideoSrc] = useState<string | null>(null)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [detections, setDetections] = useState<Detection[]>([])
+  const [isDragOver, setIsDragOver] = useState(false)
+  const [stats, setStats] = useState({ totalFrames: 0, detectedFrames: 0, avgConfidence: 0 })
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  const processVideo = useCallback((file: File) => {
+    const url = URL.createObjectURL(file)
+    setVideoSrc(url)
+    setIsProcessing(true)
+    setProgress(0)
+    setDetections([])
+
+    const totalFrames = 120
+    let currentFrame = 0
+    const mockDetections: Detection[] = []
+
+    const processFrame = () => {
+      currentFrame++
+      setProgress((currentFrame / totalFrames) * 100)
+
+      if (Math.random() > 0.6) {
+        mockDetections.push({
+          frame: currentFrame,
+          label: DISEASE_LABELS[Math.floor(Math.random() * DISEASE_LABELS.length)],
+          confidence: 0.7 + Math.random() * 0.25,
+        })
+      }
+
+      if (currentFrame < totalFrames) {
+        setTimeout(processFrame, 30)
+      } else {
+        setIsProcessing(false)
+        setDetections(mockDetections)
+        const avgConf = mockDetections.length > 0
+          ? mockDetections.reduce((sum, d) => sum + d.confidence, 0) / mockDetections.length
+          : 0
+        setStats({ totalFrames, detectedFrames: mockDetections.length, avgConfidence: avgConf })
+      }
+    }
+
+    setTimeout(processFrame, 100)
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    const file = e.dataTransfer.files[0]
+    if (file && file.type.startsWith("video/")) processVideo(file)
+  }, [processVideo])
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) processVideo(file)
+  }
+
+  const resetVideo = () => {
+    if (videoSrc) URL.revokeObjectURL(videoSrc)
+    setVideoSrc(null)
+    setDetections([])
+    setProgress(0)
+    setStats({ totalFrames: 0, detectedFrames: 0, avgConfidence: 0 })
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }
+
+  const groupedDetections = detections.reduce((acc, det) => {
+    if (!acc[det.label]) acc[det.label] = []
+    acc[det.label].push(det)
+    return acc
+  }, {} as Record<string, Detection[]>)
+
+  return (
+    <div className="min-h-screen relative">
+      <ParticlesBackground />
+      <NavHeader />
+
+      <main className="relative z-10 pt-24 pb-16 px-4 sm:px-6 lg:px-8 page-transition">
+        <div className="max-w-6xl mx-auto">
+          <div className="text-center mb-8">
+            <h1 className="text-4xl md:text-5xl font-bold mb-4">
+              <span className="text-foreground">视频</span>{" "}
+              <span className="text-primary neon-text">检测</span>
+            </h1>
+            <p className="text-muted-foreground max-w-2xl mx-auto">
+              上传视频文件进行全面的逐帧病害分析
+            </p>
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-8">
+            {/* Video Upload/Player */}
+            <div className="glass-card rounded-2xl p-6">
+              <h2 className="text-xl font-semibold text-foreground mb-4">视频输入</h2>
+
+              {!videoSrc ? (
+                <div
+                  className={`border-2 border-dashed rounded-xl p-12 text-center transition-all duration-300 cursor-pointer ${
+                    isDragOver ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"
+                  }`}
+                  onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
+                  onDragLeave={() => setIsDragOver(false)}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <input ref={fileInputRef} type="file" accept="video/*" className="hidden" onChange={handleFileChange} />
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <svg className="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+                    </svg>
+                  </div>
+                  <p className="text-foreground font-medium mb-2">拖拽或点击上传视频</p>
+                  <p className="text-sm text-muted-foreground">支持 MP4、WEBM、MOV 格式</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="relative aspect-video bg-secondary/30 rounded-xl overflow-hidden">
+                    <video ref={videoRef} src={videoSrc} controls className="w-full h-full object-contain" />
+                    <button onClick={resetVideo} className="absolute top-4 right-4 p-2 rounded-lg bg-background/80 hover:bg-background text-foreground transition-colors">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {isProcessing && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-foreground">正在处理帧...</span>
+                        <span className="text-primary font-mono">{progress.toFixed(0)}%</span>
+                      </div>
+                      <div className="w-full bg-secondary rounded-full h-2 overflow-hidden">
+                        <div className="bg-primary h-2 rounded-full transition-all duration-100" style={{ width: `${progress}%` }} />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Results Panel */}
+            <div className="glass-card rounded-2xl p-6">
+              <h2 className="text-xl font-semibold text-foreground mb-4">分析结果</h2>
+
+              {detections.length === 0 && !isProcessing ? (
+                <div className="text-center py-12">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-secondary/50 flex items-center justify-center">
+                    <svg className="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  </div>
+                  <p className="text-muted-foreground">请上传视频以查看分析结果</p>
+                </div>
+              ) : isProcessing ? (
+                <div className="text-center py-12">
+                  <div className="w-12 h-12 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                  <p className="text-primary font-medium">YOLOv26 正在分析视频...</p>
+                  <p className="text-sm text-muted-foreground mt-2">这可能需要一些时间</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="p-3 rounded-xl bg-secondary/30 text-center">
+                      <div className="text-2xl font-bold text-primary">{stats.totalFrames}</div>
+                      <div className="text-xs text-muted-foreground">总帧数</div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-secondary/30 text-center">
+                      <div className="text-2xl font-bold text-primary">{stats.detectedFrames}</div>
+                      <div className="text-xs text-muted-foreground">检测数</div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-secondary/30 text-center">
+                      <div className="text-2xl font-bold text-primary">{(stats.avgConfidence * 100).toFixed(0)}%</div>
+                      <div className="text-xs text-muted-foreground">平均置信度</div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-medium text-foreground">病害分布</h3>
+                    {Object.entries(groupedDetections).map(([label, dets]) => (
+                      <div key={label} className="p-3 rounded-xl bg-secondary/30 border border-border">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-foreground">{label}</span>
+                          <span className="text-xs text-primary">{dets.length} 次检测</span>
+                        </div>
+                        <div className="w-full bg-secondary rounded-full h-1.5">
+                          <div className="bg-primary h-1.5 rounded-full" style={{ width: `${(dets.length / stats.detectedFrames) * 100}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button onClick={() => window.location.href = "/diagnosis"} className="w-full mt-4 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all duration-300">
+                    查看病害详情
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  )
+}

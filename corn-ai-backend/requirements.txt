@@ -1,0 +1,27 @@
+# ── Web Framework ──────────────────────────────────────────────────────────────
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.12
+
+# ── Settings & Validation ──────────────────────────────────────────────────────
+pydantic==2.10.3
+pydantic-settings==2.6.1
+
+# ── HTTP Client ────────────────────────────────────────────────────────────────
+httpx==0.28.1
+
+# ── Image Processing ───────────────────────────────────────────────────────────
+opencv-python-headless==4.10.0.84
+Pillow==11.0.0
+
+# ── AI / ML ────────────────────────────────────────────────────────────────────
+ultralytics==8.3.52          # YOLOv8/v11/v26 via Ultralytics API
+torch>=2.0.0                 # PyTorch — install GPU variant separately if needed
+torchvision>=0.15.0
+
+# ── Logging ────────────────────────────────────────────────────────────────────
+loguru==0.7.3
+
+# ── Utilities ──────────────────────────────────────────────────────────────────
+python-dotenv==1.0.1
+numpy>=1.24.0

@@ -1,0 +1,52 @@
+2026-03-11 11:17:42 | WARNING  | app.detector:_load_model:66 - YOLO weight file not found at 'weights\yolov26_corn_disease.pt'. Detection will be unavailable until a valid .pt file is placed there.
+2026-03-11 11:17:43 | INFO     | app.main:lifespan:24 - 🌽 Starting Corn AI Disease Detection Backend v1.0.0
+2026-03-11 11:17:43 | INFO     | app.main:lifespan:25 -    YOLO model ready : False
+2026-03-11 11:17:43 | INFO     | app.main:lifespan:26 -    Device           : cuda
+2026-03-11 11:17:43 | INFO     | app.main:lifespan:27 -    Uploads dir      : D:\cornweb\corn-ai-backend\uploads
+2026-03-11 11:18:29 | INFO     | app.main:lifespan:31 - Shutting down gracefully …
+2026-03-11 11:20:12 | INFO     | app.detector:_load_model:75 - Loading YOLO model from 'weights\yolov26_corn_disease.pt' on device 'cuda' …
+2026-03-11 11:20:12 | INFO     | app.detector:_load_model:78 - YOLO model loaded successfully.
+2026-03-11 11:20:12 | INFO     | app.main:lifespan:24 - 🌽 Starting Corn AI Disease Detection Backend v1.0.0
+2026-03-11 11:20:12 | INFO     | app.main:lifespan:25 -    YOLO model ready : True
+2026-03-11 11:20:12 | INFO     | app.main:lifespan:26 -    Device           : cuda
+2026-03-11 11:20:12 | INFO     | app.main:lifespan:27 -    Uploads dir      : D:\cornweb\corn-ai-backend\uploads
+2026-03-11 11:26:15 | INFO     | app.main:lifespan:31 - Shutting down gracefully …
+2026-03-11 11:27:05 | INFO     | app.detector:_load_model:75 - Loading YOLO model from 'weights\yolov26_corn_disease.pt' on device 'cuda' …
+2026-03-11 11:27:05 | INFO     | app.detector:_load_model:78 - YOLO model loaded successfully.
+2026-03-11 11:27:05 | INFO     | app.main:lifespan:24 - 🌽 Starting Corn AI Disease Detection Backend v1.0.0
+2026-03-11 11:27:05 | INFO     | app.main:lifespan:25 -    YOLO model ready : True
+2026-03-11 11:27:05 | INFO     | app.main:lifespan:26 -    Device           : cuda
+2026-03-11 11:27:05 | INFO     | app.main:lifespan:27 -    Uploads dir      : D:\cornweb\corn-ai-backend\uploads
+2026-03-11 13:07:24 | INFO     | app.main:lifespan:31 - Shutting down gracefully …
+2026-03-11 13:07:28 | INFO     | app.detector:_load_model:75 - Loading YOLO model from 'weights\yolov26_corn_disease.pt' on device 'cuda' …
+2026-03-11 13:07:28 | INFO     | app.detector:_load_model:78 - YOLO model loaded successfully.
+2026-03-11 13:08:45 | INFO     | app.detector:_load_model:75 - Loading YOLO model from 'weights\yolov26_corn_disease.pt' on device 'cuda' …
+2026-03-11 13:08:45 | INFO     | app.detector:_load_model:78 - YOLO model loaded successfully.
+2026-03-11 13:09:23 | INFO     | app.detector:_load_model:75 - Loading YOLO model from 'weights\yolov26_corn_disease.pt' on device 'cuda' …
+2026-03-11 13:09:23 | INFO     | app.detector:_load_model:78 - YOLO model loaded successfully.
+2026-03-11 13:10:27 | INFO     | app.detector:_load_model:75 - Loading YOLO model from 'weights\yolov26_corn_disease.pt' on device 'cuda' …
+2026-03-11 13:10:28 | INFO     | app.detector:_load_model:78 - YOLO model loaded successfully.
+2026-03-11 13:10:28 | INFO     | app.main:lifespan:40 - 🌽 Starting Corn AI Disease Detection Backend v1.0.0
+2026-03-11 13:10:28 | INFO     | app.main:lifespan:41 -    YOLO model ready : True
+2026-03-11 13:10:28 | INFO     | app.main:lifespan:42 -    Device           : cuda
+2026-03-11 13:10:28 | INFO     | app.main:lifespan:43 -    Uploads dir      : D:\cornweb\corn-ai-backend\uploads
+2026-03-11 13:10:35 | INFO     | app.main:lifespan:47 - Shutting down gracefully …
+2026-03-11 13:10:41 | INFO     | app.detector:_load_model:75 - Loading YOLO model from 'weights\yolov26_corn_disease.pt' on device 'cuda' …
+2026-03-11 13:10:41 | INFO     | app.detector:_load_model:78 - YOLO model loaded successfully.
+2026-03-11 13:10:41 | INFO     | app.main:lifespan:40 - 🌽 Starting Corn AI Disease Detection Backend v1.0.0
+2026-03-11 13:10:41 | INFO     | app.main:lifespan:41 -    YOLO model ready : True
+2026-03-11 13:10:41 | INFO     | app.main:lifespan:42 -    Device           : cuda
+2026-03-11 13:10:41 | INFO     | app.main:lifespan:43 -    Uploads dir      : D:\cornweb\corn-ai-backend\uploads
+2026-03-11 13:42:52 | INFO     | app.detector:_load_model:75 - Loading YOLO model from 'weights\yolov26_corn_disease.pt' on device 'cuda' …
+2026-03-11 13:42:53 | INFO     | app.detector:_load_model:78 - YOLO model loaded successfully.
+2026-03-11 13:42:53 | INFO     | app.main:lifespan:40 - 🌽 Starting Corn AI Disease Detection Backend v1.0.0
+2026-03-11 13:42:53 | INFO     | app.main:lifespan:41 -    YOLO model ready : True
+2026-03-11 13:42:53 | INFO     | app.main:lifespan:42 -    Device           : cuda
+2026-03-11 13:42:53 | INFO     | app.main:lifespan:43 -    Uploads dir      : D:\cornweb\corn-ai-backend\uploads
+2026-03-11 13:56:51 | INFO     | app.main:lifespan:47 - Shutting down gracefully …
+2026-03-11 13:56:56 | INFO     | app.detector:_load_model:75 - Loading YOLO model from 'weights\yolov26_corn_disease.pt' on device 'cuda' …
+2026-03-11 13:56:56 | INFO     | app.detector:_load_model:78 - YOLO model loaded successfully.
+2026-03-11 13:56:56 | INFO     | app.main:lifespan:40 - 🌽 Starting Corn AI Disease Detection Backend v1.0.0
+2026-03-11 13:56:56 | INFO     | app.main:lifespan:41 -    YOLO model ready : True
+2026-03-11 13:56:56 | INFO     | app.main:lifespan:42 -    Device           : cuda
+2026-03-11 13:56:56 | INFO     | app.main:lifespan:43 -    Uploads dir      : D:\cornweb\corn-ai-backend\uploads
