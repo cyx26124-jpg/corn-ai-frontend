@@ -1,297 +1,299 @@
 "use client"
 
-import { useState, useRef, useCallback } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { ParticlesBackground } from "@/components/particles-background"
 import { NavHeader } from "@/components/nav-header"
 
 interface Detection {
-  frame: number
   label: string
   confidence: number
+  bbox: { x: number; y: number; width: number; height: number }
 }
 
 interface ApiDetection {
-  class_name: string
-  class_name_zh: string
+  disease: string
   confidence: number
   bbox: number[]
+  class_id?: number
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
-export default function VideoDetectionPage() {
-  const [videoSrc, setVideoSrc] = useState<string | null>(null)
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [progress, setProgress] = useState(0)
+export default function CameraDetectionPage() {
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [hasPermission, setHasPermission] = useState<boolean | null>(null)
   const [detections, setDetections] = useState<Detection[]>([])
-  const [isDragOver, setIsDragOver] = useState(false)
-  const [stats, setStats] = useState({ totalFrames: 0, detectedFrames: 0, avgConfidence: 0 })
-  const [error, setError] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [fps, setFps] = useState(0)
+  const [isDetecting, setIsDetecting] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const animationRef = useRef<number>()
+  const lastTimeRef = useRef<number>(0)
+  const frameCountRef = useRef<number>(0)
+  const detectingRef = useRef(false)
+  const lastDetectionsRef = useRef<Detection[]>([])
 
-  const extractFrames = (video: HTMLVideoElement, totalFrames: number): Promise<string[]> => {
-    return new Promise((resolve) => {
-      const canvas = canvasRef.current || document.createElement("canvas")
-      const ctx = canvas.getContext("2d")!
-      const frames: string[] = []
-      const duration = video.duration
-      const interval = duration / totalFrames
-      let currentIndex = 0
-
-      canvas.width = video.videoWidth || 640
-      canvas.height = video.videoHeight || 480
-
-      const captureFrame = () => {
-        if (currentIndex >= totalFrames) {
-          resolve(frames)
-          return
-        }
-        video.currentTime = currentIndex * interval
-      }
-
-      video.onseeked = () => {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-        frames.push(canvas.toDataURL("image/jpeg", 0.6).split(",")[1])
-        currentIndex++
-        captureFrame()
-      }
-
-      captureFrame()
-    })
+  const captureFrame = (): string | null => {
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    if (!video || !canvas) return null
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return null
+    canvas.width = video.videoWidth || 640
+    canvas.height = video.videoHeight || 480
+    ctx.drawImage(video, 0, 0)
+    return canvas.toDataURL("image/jpeg", 0.7).split(",")[1]
   }
 
-  const processVideo = useCallback(async (file: File) => {
-    const url = URL.createObjectURL(file)
-    setVideoSrc(url)
-    setIsProcessing(true)
-    setProgress(0)
-    setDetections([])
-    setError(null)
+  const sendFrameToBackend = useCallback(async () => {
+    if (detectingRef.current) return
+    detectingRef.current = true
+    setIsDetecting(true)
 
     try {
-      // 等待视频元数据加载
-      const video = videoRef.current!
-      await new Promise<void>((resolve) => {
-        video.onloadedmetadata = () => resolve()
-        video.src = url
+      const base64 = captureFrame()
+      if (!base64) return
+
+      const response = await fetch(`${API_BASE}/camera_frame`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "ngrok-skip-browser-warning": "true",
+        },
+        body: JSON.stringify({ image: base64, run_diagnosis: false }),
       })
 
-      const SAMPLE_FRAMES = 20 // 每个视频抽取20帧送检
-      const allDetections: Detection[] = []
+      if (!response.ok) return
 
-      const frames = await extractFrames(video, SAMPLE_FRAMES)
+      const data = await response.json()
+      const parsed: Detection[] = (data.detections || []).map((d: ApiDetection) => ({
+        label: d.disease,
+        confidence: d.confidence,
+        bbox: { x: d.bbox[0], y: d.bbox[1], width: d.bbox[2], height: d.bbox[3] },
+      }))
 
-      for (let i = 0; i < frames.length; i++) {
-        setProgress(((i + 1) / frames.length) * 100)
-
-        try {
-          const response = await fetch(`${API_BASE}/camera_frame`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "ngrok-skip-browser-warning": "true",
-            },
-            body: JSON.stringify({ image: frames[i], run_diagnosis: false }),
-          })
-
-          if (response.ok) {
-            const data = await response.json()
-            ;(data.detections || []).forEach((d: ApiDetection) => {
-              allDetections.push({
-                frame: i + 1,
-                label: d.class_name_zh || d.class_name,
-                confidence: d.confidence,
-              })
-            })
-          }
-        } catch {
-          // 某帧失败继续
-        }
-      }
-
-      setDetections(allDetections)
-      const avgConf = allDetections.length > 0
-        ? allDetections.reduce((sum, d) => sum + d.confidence, 0) / allDetections.length
-        : 0
-      setStats({
-        totalFrames: SAMPLE_FRAMES,
-        detectedFrames: allDetections.length,
-        avgConfidence: avgConf,
-      })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "视频处理失败")
+      lastDetectionsRef.current = parsed
+      setDetections(parsed)
+    } catch {
+      // 静默失败，继续下一帧
     } finally {
-      setIsProcessing(false)
+      detectingRef.current = false
+      setIsDetecting(false)
     }
   }, [])
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragOver(false)
-    const file = e.dataTransfer.files[0]
-    if (file && file.type.startsWith("video/")) processVideo(file)
-  }, [processVideo])
+  const drawOverlay = useCallback(() => {
+    const video = videoRef.current
+    const canvas = overlayCanvasRef.current
+    if (!video || !canvas || !isStreaming) return
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) processVideo(file)
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+
+    canvas.width = video.videoWidth || 640
+    canvas.height = video.videoHeight || 480
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    lastDetectionsRef.current.forEach((det) => {
+      ctx.strokeStyle = "#4ade80"
+      ctx.lineWidth = 3
+      ctx.strokeRect(det.bbox.x, det.bbox.y, det.bbox.width, det.bbox.height)
+
+      const labelText = `${det.label} ${(det.confidence * 100).toFixed(0)}%`
+      ctx.font = "bold 14px Inter, sans-serif"
+      const textWidth = ctx.measureText(labelText).width
+      ctx.fillStyle = "rgba(74, 222, 128, 0.9)"
+      ctx.fillRect(det.bbox.x, det.bbox.y - 24, textWidth + 12, 24)
+      ctx.fillStyle = "#000"
+      ctx.fillText(labelText, det.bbox.x + 6, det.bbox.y - 7)
+    })
+
+    frameCountRef.current++
+    const now = performance.now()
+    if (now - lastTimeRef.current >= 1000) {
+      setFps(frameCountRef.current)
+      frameCountRef.current = 0
+      lastTimeRef.current = now
+      // 每秒发送一帧给后端
+      sendFrameToBackend()
+    }
+
+    animationRef.current = requestAnimationFrame(drawOverlay)
+  }, [isStreaming, sendFrameToBackend])
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: 640, height: 480 },
+      })
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        streamRef.current = stream
+        setIsStreaming(true)
+        setHasPermission(true)
+      }
+    } catch {
+      setHasPermission(false)
+    }
   }
 
-  const resetVideo = () => {
-    if (videoSrc) URL.revokeObjectURL(videoSrc)
-    setVideoSrc(null)
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
+    }
+    if (animationRef.current) cancelAnimationFrame(animationRef.current)
+    setIsStreaming(false)
     setDetections([])
-    setProgress(0)
-    setError(null)
-    setStats({ totalFrames: 0, detectedFrames: 0, avgConfidence: 0 })
-    if (fileInputRef.current) fileInputRef.current.value = ""
+    lastDetectionsRef.current = []
+    setFps(0)
   }
 
-  const groupedDetections = detections.reduce((acc, det) => {
-    if (!acc[det.label]) acc[det.label] = []
-    acc[det.label].push(det)
-    return acc
-  }, {} as Record<string, Detection[]>)
+  useEffect(() => {
+    if (isStreaming) animationRef.current = requestAnimationFrame(drawOverlay)
+    return () => { if (animationRef.current) cancelAnimationFrame(animationRef.current) }
+  }, [isStreaming, drawOverlay])
+
+  useEffect(() => { return () => { stopCamera() } }, [])
 
   return (
     <div className="min-h-screen relative">
       <ParticlesBackground />
       <NavHeader />
-      {/* 隐藏的帧提取 canvas */}
-      <canvas ref={canvasRef} className="hidden" />
 
       <main className="relative z-10 pt-24 pb-16 px-4 sm:px-6 lg:px-8 page-transition">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-8">
             <h1 className="text-4xl md:text-5xl font-bold mb-4">
-              <span className="text-foreground">视频</span>{" "}
+              <span className="text-foreground">摄像头</span>{" "}
               <span className="text-primary neon-text">检测</span>
             </h1>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              上传视频文件进行全面的逐帧病害分析
+              使用设备摄像头进行实时玉米病害检测，AI实时分析
             </p>
           </div>
 
-          <div className="grid lg:grid-cols-2 gap-8">
-            {/* Video Upload/Player */}
-            <div className="glass-card rounded-2xl p-6">
-              <h2 className="text-xl font-semibold text-foreground mb-4">视频输入</h2>
-
-              {!videoSrc ? (
-                <div
-                  className={`border-2 border-dashed rounded-xl p-12 text-center transition-all duration-300 cursor-pointer ${
-                    isDragOver ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"
-                  }`}
-                  onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
-                  onDragLeave={() => setIsDragOver(false)}
-                  onDrop={handleDrop}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <input ref={fileInputRef} type="file" accept="video/*" className="hidden" onChange={handleFileChange} />
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-primary/10 flex items-center justify-center">
-                    <svg className="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
-                    </svg>
-                  </div>
-                  <p className="text-foreground font-medium mb-2">拖拽或点击上传视频</p>
-                  <p className="text-sm text-muted-foreground">支持 MP4、WEBM、MOV 格式</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="relative aspect-video bg-secondary/30 rounded-xl overflow-hidden">
-                    <video ref={videoRef} src={videoSrc} controls className="w-full h-full object-contain" />
-                    <button onClick={resetVideo} className="absolute top-4 right-4 p-2 rounded-lg bg-background/80 hover:bg-background text-foreground transition-colors">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  </div>
-
-                  {isProcessing && (
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-foreground">正在处理帧...</span>
-                        <span className="text-primary font-mono">{progress.toFixed(0)}%</span>
-                      </div>
-                      <div className="w-full bg-secondary rounded-full h-2 overflow-hidden">
-                        <div className="bg-primary h-2 rounded-full transition-all duration-100" style={{ width: `${progress}%` }} />
-                      </div>
-                    </div>
-                  )}
-
-                  {error && (
-                    <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
-                      ⚠️ {error}
-                    </div>
+          <div className="grid lg:grid-cols-3 gap-8">
+            {/* Camera View */}
+            <div className="lg:col-span-2 glass-card rounded-2xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-foreground">实时画面</h2>
+                <div className="flex items-center gap-4">
+                  {isStreaming && (
+                    <>
+                      <span className="flex items-center gap-2 text-sm">
+                        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                        <span className="text-red-400">直播中</span>
+                      </span>
+                      <span className="text-sm text-muted-foreground font-mono">{fps} FPS</span>
+                      {isDetecting && (
+                        <span className="text-xs text-primary animate-pulse">检测中...</span>
+                      )}
+                    </>
                   )}
                 </div>
-              )}
+              </div>
+
+              <div className="relative aspect-video bg-secondary/30 rounded-xl overflow-hidden">
+                <video ref={videoRef} autoPlay playsInline muted
+                  className="absolute inset-0 w-full h-full object-cover"
+                  style={{ display: isStreaming ? "block" : "none" }}
+                />
+                {/* 隐藏的捕帧 canvas */}
+                <canvas ref={canvasRef} className="hidden" />
+                {/* 检测框叠加层 */}
+                <canvas ref={overlayCanvasRef}
+                  className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                  style={{ display: isStreaming ? "block" : "none" }}
+                />
+
+                {!isStreaming && (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="text-center">
+                      {hasPermission === false ? (
+                        <>
+                          <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-destructive/20 flex items-center justify-center">
+                            <svg className="w-8 h-8 text-destructive" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                            </svg>
+                          </div>
+                          <p className="text-foreground font-medium mb-2">摄像头访问被拒绝</p>
+                          <p className="text-sm text-muted-foreground">请启用摄像头权限</p>
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-primary/10 flex items-center justify-center">
+                            <svg className="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                          </div>
+                          <p className="text-foreground font-medium mb-2">摄像头已就绪</p>
+                          <p className="text-sm text-muted-foreground">点击开始按钮启动检测</p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-center gap-4 mt-6">
+                {!isStreaming ? (
+                  <button onClick={startCamera} className="px-8 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all duration-300 hover:scale-105 neon-border">
+                    启动摄像头
+                  </button>
+                ) : (
+                  <button onClick={stopCamera} className="px-8 py-3 rounded-xl bg-destructive text-destructive-foreground font-semibold hover:bg-destructive/90 transition-all duration-300">
+                    停止摄像头
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Results Panel */}
+            {/* Detection Panel */}
             <div className="glass-card rounded-2xl p-6">
-              <h2 className="text-xl font-semibold text-foreground mb-4">分析结果</h2>
+              <h2 className="text-xl font-semibold text-foreground mb-4">实时检测</h2>
 
-              {detections.length === 0 && !isProcessing ? (
-                <div className="text-center py-12">
-                  <div className="w-16 h-16 mx-auto mb-4 rounded-xl bg-secondary/50 flex items-center justify-center">
-                    <svg className="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              {detections.length === 0 ? (
+                <div className="text-center py-8">
+                  <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-secondary/50 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                     </svg>
                   </div>
-                  <p className="text-muted-foreground">请上传视频以查看分析结果</p>
-                </div>
-              ) : isProcessing ? (
-                <div className="text-center py-12">
-                  <div className="w-12 h-12 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                  <p className="text-primary font-medium">YOLOv26 正在分析视频...</p>
-                  <p className="text-sm text-muted-foreground mt-2">逐帧发送后端检测中</p>
+                  <p className="text-sm text-muted-foreground">
+                    {isStreaming ? "正在扫描病害..." : "启动摄像头开始检测"}
+                  </p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="p-3 rounded-xl bg-secondary/30 text-center">
-                      <div className="text-2xl font-bold text-primary">{stats.totalFrames}</div>
-                      <div className="text-xs text-muted-foreground">总帧数</div>
+                <div className="space-y-3">
+                  {detections.map((det, index) => (
+                    <div key={index} className="p-4 rounded-xl bg-secondary/30 border border-primary/30">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium text-foreground text-sm">{det.label}</span>
+                        <span className="px-2 py-1 rounded text-xs font-medium bg-primary/20 text-primary">
+                          {(det.confidence * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-secondary rounded-full h-1.5">
+                        <div className="bg-primary h-1.5 rounded-full" style={{ width: `${det.confidence * 100}%` }} />
+                      </div>
                     </div>
-                    <div className="p-3 rounded-xl bg-secondary/30 text-center">
-                      <div className="text-2xl font-bold text-primary">{stats.detectedFrames}</div>
-                      <div className="text-xs text-muted-foreground">检测数</div>
-                    </div>
-                    <div className="p-3 rounded-xl bg-secondary/30 text-center">
-                      <div className="text-2xl font-bold text-primary">{(stats.avgConfidence * 100).toFixed(0)}%</div>
-                      <div className="text-xs text-muted-foreground">平均置信度</div>
-                    </div>
-                  </div>
-
-                  {Object.keys(groupedDetections).length > 0 ? (
-                    <div className="space-y-3">
-                      <h3 className="text-sm font-medium text-foreground">病害分布</h3>
-                      {Object.entries(groupedDetections).map(([label, dets]) => (
-                        <div key={label} className="p-3 rounded-xl bg-secondary/30 border border-border">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-foreground">{label}</span>
-                            <span className="text-xs text-primary">{dets.length} 次检测</span>
-                          </div>
-                          <div className="w-full bg-secondary rounded-full h-1.5">
-                            <div className="bg-primary h-1.5 rounded-full" style={{ width: `${(dets.length / stats.detectedFrames) * 100}%` }} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-4 text-muted-foreground text-sm">
-                      未检测到病害
-                    </div>
-                  )}
-
-                  <button onClick={() => window.location.href = "/diagnosis"} className="w-full mt-4 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all duration-300">
-                    查看病害详情
-                  </button>
+                  ))}
                 </div>
               )}
+
+              <div className="mt-6 p-4 rounded-xl bg-secondary/20 border border-border">
+                <h3 className="text-sm font-medium text-foreground mb-2">可检测病害</h3>
+                <ul className="text-xs text-muted-foreground space-y-1">
+                  <li>🟡 玉米灰斑病</li>
+                  <li>🟢 健康</li>
+                  <li>🟠 玉米叶斑病</li>
+                  <li>🔴 玉米锈病</li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>

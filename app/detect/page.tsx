@@ -11,10 +11,10 @@ interface Detection {
 }
 
 interface ApiDetection {
-  class_name: string
-  class_name_zh: string
+  disease: string
   confidence: number
   bbox: number[]
+  class_id?: number
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
@@ -87,7 +87,7 @@ export default function ImageDetectionPage() {
 
         // 后端返回 detections 数组
         const parsed: Detection[] = (data.detections || []).map((d: ApiDetection) => ({
-          label: d.class_name_zh || d.class_name,
+          label: d.disease,
           confidence: d.confidence,
           bbox: {
             x: d.bbox[0],
