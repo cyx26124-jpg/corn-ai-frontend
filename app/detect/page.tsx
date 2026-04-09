@@ -13,7 +13,7 @@ interface Detection {
 interface ApiDetection {
   disease: string
   confidence: number
-  bbox: number[]
+  bbox: number[]   // [x1, y1, x2, y2]
   class_id?: number
 }
 
@@ -27,40 +27,36 @@ export default function ImageDetectionPage() {
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const currentFileRef = useRef<File | null>(null)
 
   const drawDetections = (imageSrc: string, dets: Detection[]) => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext("2d")
     if (!ctx) return
-
     const img = new Image()
     img.crossOrigin = "anonymous"
     img.onload = () => {
       canvas.width = img.width
       canvas.height = img.height
       ctx.drawImage(img, 0, 0)
-
       dets.forEach((det) => {
+        const { x, y, width, height } = det.bbox
         ctx.strokeStyle = "#4ade80"
         ctx.lineWidth = 3
-        ctx.strokeRect(det.bbox.x, det.bbox.y, det.bbox.width, det.bbox.height)
-
+        ctx.strokeRect(x, y, width, height)
         const labelText = `${det.label} ${(det.confidence * 100).toFixed(1)}%`
-        ctx.font = "bold 14px Inter, sans-serif"
-        const textWidth = ctx.measureText(labelText).width
-        ctx.fillStyle = "rgba(74, 222, 128, 0.9)"
-        ctx.fillRect(det.bbox.x, det.bbox.y - 24, textWidth + 12, 24)
-        ctx.fillStyle = "#000"
-        ctx.fillText(labelText, det.bbox.x + 6, det.bbox.y - 7)
+        ctx.font = "bold 14px sans-serif"
+        const tw = ctx.measureText(labelText).width
+        ctx.fillStyle = "rgba(0,0,0,0.75)"
+        ctx.fillRect(x, y - 26, tw + 14, 26)
+        ctx.fillStyle = "#4ade80"
+        ctx.fillText(labelText, x + 7, y - 8)
       })
     }
     img.src = imageSrc
   }
 
   const processImage = useCallback(async (file: File) => {
-    currentFileRef.current = file
     const reader = new FileReader()
     reader.onload = async (e) => {
       const result = e.target?.result as string
@@ -72,31 +68,18 @@ export default function ImageDetectionPage() {
       try {
         const formData = new FormData()
         formData.append("file", file)
-
         const response = await fetch(`${API_BASE}/detect`, {
           method: "POST",
           headers: { "ngrok-skip-browser-warning": "true" },
           body: formData,
         })
-
-        if (!response.ok) {
-          throw new Error(`服务器错误: ${response.status}`)
-        }
-
+        if (!response.ok) throw new Error(`服务器错误: ${response.status}`)
         const data = await response.json()
-
-        // 后端返回 detections 数组
-        const parsed: Detection[] = (data.detections || []).map((d: ApiDetection) => ({
+        const parsed: Detection[] = (data.detections as ApiDetection[] || []).map((d) => ({
           label: d.disease,
           confidence: d.confidence,
-          bbox: {
-            x: d.bbox[0],
-            y: d.bbox[1],
-            width: d.bbox[2],
-            height: d.bbox[3],
-          },
+          bbox: { x: d.bbox[0], y: d.bbox[1], width: d.bbox[2] - d.bbox[0], height: d.bbox[3] - d.bbox[1] },
         }))
-
         setDetections(parsed)
         drawDetections(result, parsed)
       } catch (err) {
@@ -112,9 +95,7 @@ export default function ImageDetectionPage() {
     e.preventDefault()
     setIsDragOver(false)
     const file = e.dataTransfer.files[0]
-    if (file && file.type.startsWith("image/")) {
-      processImage(file)
-    }
+    if (file && file.type.startsWith("image/")) processImage(file)
   }, [processImage])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -122,7 +103,7 @@ export default function ImageDetectionPage() {
     if (file) processImage(file)
   }
 
-  const resetDetection = () => {
+  const reset = () => {
     setImage(null)
     setDetections([])
     setError(null)
@@ -133,7 +114,6 @@ export default function ImageDetectionPage() {
     <div className="min-h-screen relative">
       <ParticlesBackground />
       <NavHeader />
-
       <main className="relative z-10 pt-24 pb-16 px-4 sm:px-6 lg:px-8 page-transition">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-8">
@@ -142,18 +122,17 @@ export default function ImageDetectionPage() {
               <span className="text-primary neon-text">检测</span>
             </h1>
             <p className="text-muted-foreground max-w-2xl mx-auto">
-              上传玉米叶片图像，AI将实时识别病害并可视化显示检测框
+              上传玉米叶片图像，AI 实时识别病害并标注检测框
             </p>
           </div>
 
           <div className="grid lg:grid-cols-2 gap-8">
-            {/* Upload Area */}
+            {/* 上传区 */}
             <div className="glass-card rounded-2xl p-6">
               <h2 className="text-xl font-semibold text-foreground mb-4">上传图像</h2>
-
               {!image ? (
                 <div
-                  className={`border-2 border-dashed rounded-xl p-12 text-center transition-all duration-300 cursor-pointer ${
+                  className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all duration-300 ${
                     isDragOver ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"
                   }`}
                   onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
@@ -181,7 +160,7 @@ export default function ImageDetectionPage() {
                       </div>
                     </div>
                   )}
-                  <button onClick={resetDetection} className="absolute top-4 right-4 p-2 rounded-lg bg-background/80 hover:bg-background text-foreground transition-colors">
+                  <button onClick={reset} className="absolute top-3 right-3 p-2 rounded-lg bg-background/80 hover:bg-background text-foreground transition-colors">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
@@ -190,14 +169,12 @@ export default function ImageDetectionPage() {
               )}
             </div>
 
-            {/* Results Panel */}
+            {/* 结果面板 */}
             <div className="glass-card rounded-2xl p-6">
               <h2 className="text-xl font-semibold text-foreground mb-4">检测结果</h2>
 
               {error && (
-                <div className="mb-4 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
-                  ⚠️ {error}
-                </div>
+                <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">⚠ {error}</div>
               )}
 
               {detections.length === 0 && !error ? (
@@ -207,43 +184,37 @@ export default function ImageDetectionPage() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                     </svg>
                   </div>
-                  <p className="text-muted-foreground">
-                    {isProcessing ? "正在检测中..." : "请上传图像以查看检测结果"}
-                  </p>
+                  <p className="text-muted-foreground">{isProcessing ? "检测中..." : "请上传图像以查看检测结果"}</p>
                 </div>
-              ) : detections.length > 0 ? (
+              ) : (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between text-sm mb-4">
-                    <span className="text-muted-foreground">发现 {detections.length} 个检测目标</span>
+                  <div className="flex items-center justify-between text-sm mb-2">
+                    <span className="text-muted-foreground">发现 {detections.length} 个目标</span>
                     <span className="px-3 py-1 rounded-full bg-primary/20 text-primary text-xs font-medium">YOLOv26</span>
                   </div>
-
-                  {detections.map((det, index) => (
-                    <div key={index} className="p-4 rounded-xl bg-secondary/30 border border-border">
+                  {detections.map((det, i) => (
+                    <div key={i} className="p-4 rounded-xl bg-secondary/30 border border-border">
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-medium text-foreground">{det.label}</span>
                         <span className={`px-2 py-1 rounded text-xs font-medium ${
                           det.confidence > 0.9 ? "bg-primary/20 text-primary"
                           : det.confidence > 0.7 ? "bg-yellow-500/20 text-yellow-400"
                           : "bg-red-500/20 text-red-400"
-                        }`}>
-                          {(det.confidence * 100).toFixed(1)}%
-                        </span>
+                        }`}>{(det.confidence * 100).toFixed(1)}%</span>
                       </div>
                       <div className="w-full bg-secondary rounded-full h-2">
                         <div className="bg-primary h-2 rounded-full transition-all duration-500" style={{ width: `${det.confidence * 100}%` }} />
                       </div>
-                      <div className="mt-2 text-xs text-muted-foreground font-mono">
-                        检测框: [{det.bbox.x}, {det.bbox.y}, {det.bbox.width}, {det.bbox.height}]
-                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground font-mono">
+                        框: [{det.bbox.x.toFixed(0)}, {det.bbox.y.toFixed(0)}, {det.bbox.width.toFixed(0)}, {det.bbox.height.toFixed(0)}]
+                      </p>
                     </div>
                   ))}
-
-                  <button onClick={() => window.location.href = "/diagnosis"} className="w-full mt-4 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all duration-300">
+                  <button onClick={() => window.location.href = "/diagnosis"} className="w-full mt-2 px-6 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-all duration-300">
                     查看详细诊断
                   </button>
                 </div>
-              ) : null}
+              )}
             </div>
           </div>
         </div>

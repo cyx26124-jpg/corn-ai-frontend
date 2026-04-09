@@ -50,3 +50,142 @@
 2026-03-11 13:56:56 | INFO     | app.main:lifespan:41 -    YOLO model ready : True
 2026-03-11 13:56:56 | INFO     | app.main:lifespan:42 -    Device           : cuda
 2026-03-11 13:56:56 | INFO     | app.main:lifespan:43 -    Uploads dir      : D:\cornweb\corn-ai-backend\uploads
+2026-03-11 15:13:26 | INFO     | app.detector:_load_model:75 - Loading YOLO model from 'weights\yolov26_corn_disease.pt' on device 'cuda' …
+2026-03-11 15:13:26 | INFO     | app.detector:_load_model:78 - YOLO model loaded successfully.
+2026-03-11 15:13:26 | INFO     | app.main:lifespan:40 - 🌽 Starting Corn AI Disease Detection Backend v1.0.0
+2026-03-11 15:13:26 | INFO     | app.main:lifespan:41 -    YOLO model ready : True
+2026-03-11 15:13:26 | INFO     | app.main:lifespan:42 -    Device           : cuda
+2026-03-11 15:13:26 | INFO     | app.main:lifespan:43 -    Uploads dir      : D:\cornweb\corn-ai-backend\uploads
+2026-03-11 15:47:40 | DEBUG    | app.utils:validate_and_save_upload:50 - Saved uploaded file → D:\cornweb\corn-ai-backend\uploads\e38d68adbb1342789aee9056507b2793.jpg
+2026-03-11 15:47:40 | INFO     | app.routes:detect_endpoint:73 - [/detect] Processing image: e38d68adbb1342789aee9056507b2793.jpg
+2026-03-11 15:47:41 | INFO     | app.services:run_detection:33 - Detection complete: 1 object(s) found in 985.6 ms
+2026-03-11 15:48:01 | DEBUG    | app.utils:validate_and_save_upload:50 - Saved uploaded file → D:\cornweb\corn-ai-backend\uploads\2ce645e88cd74adf90dfcd83e4a65339.jpg
+2026-03-11 15:48:01 | INFO     | app.routes:detect_endpoint:73 - [/detect] Processing image: 2ce645e88cd74adf90dfcd83e4a65339.jpg
+2026-03-11 15:48:01 | INFO     | app.services:run_detection:33 - Detection complete: 1 object(s) found in 19.2 ms
+2026-03-11 15:55:57 | DEBUG    | app.utils:validate_and_save_upload:50 - Saved uploaded file → D:\cornweb\corn-ai-backend\uploads\f30020a832aa40b2ab99273d1c8556e0.jpg
+2026-03-11 15:55:57 | INFO     | app.routes:detect_endpoint:73 - [/detect] Processing image: f30020a832aa40b2ab99273d1c8556e0.jpg
+2026-03-11 15:55:57 | INFO     | app.services:run_detection:33 - Detection complete: 1 object(s) found in 20.9 ms
+2026-03-11 17:11:11 | INFO     | app.main:lifespan:47 - Shutting down gracefully …
+2026-03-11 17:11:17 | INFO     | app.detector:_load_model:75 - Loading YOLO model from 'weights\yolov26_corn_disease.pt' on device 'cuda' …
+2026-03-11 17:11:17 | INFO     | app.detector:_load_model:78 - YOLO model loaded successfully.
+2026-03-11 17:11:17 | INFO     | app.main:lifespan:40 - 🌽 Starting Corn AI Disease Detection Backend v1.0.0
+2026-03-11 17:11:17 | INFO     | app.main:lifespan:41 -    YOLO model ready : True
+2026-03-11 17:11:17 | INFO     | app.main:lifespan:42 -    Device           : cuda
+2026-03-11 17:11:17 | INFO     | app.main:lifespan:43 -    Uploads dir      : D:\cornweb\corn-ai-backend\uploads
+2026-03-11 17:11:27 | INFO     | app.main:lifespan:47 - Shutting down gracefully …
+2026-03-11 17:11:31 | INFO     | app.detector:_load_model:73 - 正在加载 YOLO 模型：weights\yolov26_corn_disease.pt，设备：cuda ...
+2026-03-11 17:11:31 | INFO     | app.detector:_load_model:79 - YOLO 模型加载成功 ✅
+2026-03-11 17:11:31 | INFO     | app.main:lifespan:40 - 🌽 Starting Corn AI Disease Detection Backend v1.0.0
+2026-03-11 17:11:31 | INFO     | app.main:lifespan:41 -    YOLO model ready : True
+2026-03-11 17:11:31 | INFO     | app.main:lifespan:42 -    Device           : cuda
+2026-03-11 17:11:31 | INFO     | app.main:lifespan:43 -    Uploads dir      : D:\cornweb\corn-ai-backend\uploads
+2026-03-11 17:13:44 | INFO     | app.detector:_load_model:73 - 正在加载 YOLO 模型：weights\yolov26_corn_disease.pt，设备：cuda ...
+2026-03-11 17:13:44 | INFO     | app.detector:_load_model:79 - YOLO 模型加载成功 ✅
+2026-03-11 17:13:44 | INFO     | app.main:lifespan:40 - 🌽 Starting Corn AI Disease Detection Backend v1.0.0
+2026-03-11 17:13:44 | INFO     | app.main:lifespan:41 -    YOLO model ready : True
+2026-03-11 17:13:44 | INFO     | app.main:lifespan:42 -    Device           : cuda
+2026-03-11 17:13:44 | INFO     | app.main:lifespan:43 -    Uploads dir      : D:\cornweb\corn-ai-backend\uploads
+2026-03-11 17:15:21 | INFO     | app.detector:_load_model:73 - 正在加载 YOLO 模型：weights\yolov26_corn_disease.pt，设备：cuda ...
+2026-03-11 17:15:22 | INFO     | app.detector:_load_model:79 - YOLO 模型加载成功 ✅
+2026-03-11 17:15:22 | INFO     | app.main:lifespan:40 - 🌽 Starting Corn AI Disease Detection Backend v1.0.0
+2026-03-11 17:15:22 | INFO     | app.main:lifespan:41 -    YOLO model ready : True
+2026-03-11 17:15:22 | INFO     | app.main:lifespan:42 -    Device           : cuda
+2026-03-11 17:15:22 | INFO     | app.main:lifespan:43 -    Uploads dir      : D:\cornweb\corn-ai-backend\uploads
+2026-03-11 17:19:52 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:19:53 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  443.4 ms
+2026-03-11 17:19:55 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:19:55 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  22.4 ms
+2026-03-11 17:19:56 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:19:56 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  21.3 ms
+2026-03-11 17:19:58 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:19:58 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  17.7 ms
+2026-03-11 17:19:59 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:19:59 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  24.8 ms
+2026-03-11 17:20:01 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:01 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  31.3 ms
+2026-03-11 17:20:02 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:02 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  23.9 ms
+2026-03-11 17:20:04 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:04 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  13.1 ms
+2026-03-11 17:20:05 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:05 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 1 个目标  |  44.2 ms
+2026-03-11 17:20:07 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:07 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 1 个目标  |  22.3 ms
+2026-03-11 17:20:08 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:08 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 1 个目标  |  27.5 ms
+2026-03-11 17:20:10 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:10 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 1 个目标  |  23.9 ms
+2026-03-11 17:20:11 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:11 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  28.2 ms
+2026-03-11 17:20:13 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:13 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 1 个目标  |  34.0 ms
+2026-03-11 17:20:14 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:14 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  27.1 ms
+2026-03-11 17:20:16 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:16 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  25.5 ms
+2026-03-11 17:20:17 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:17 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  27.4 ms
+2026-03-11 17:20:19 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:19 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  19.3 ms
+2026-03-11 17:20:20 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:20 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  36.7 ms
+2026-03-11 17:20:22 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:22 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  21.3 ms
+2026-03-11 17:20:23 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:23 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  33.4 ms
+2026-03-11 17:20:25 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:25 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  15.4 ms
+2026-03-11 17:20:26 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:26 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 1 个目标  |  19.2 ms
+2026-03-11 17:20:28 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:28 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 1 个目标  |  24.5 ms
+2026-03-11 17:20:29 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:29 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 1 个目标  |  28.3 ms
+2026-03-11 17:20:31 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:31 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 1 个目标  |  31.0 ms
+2026-03-11 17:20:32 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:32 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  20.8 ms
+2026-03-11 17:20:34 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:34 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 1 个目标  |  31.6 ms
+2026-03-11 17:20:35 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:35 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 1 个目标  |  19.5 ms
+2026-03-11 17:20:36 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:36 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 1 个目标  |  39.3 ms
+2026-03-11 17:20:38 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:38 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  18.8 ms
+2026-03-11 17:20:40 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:40 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  29.7 ms
+2026-03-11 17:20:41 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:20:41 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  19.0 ms
+2026-03-11 17:52:15 | INFO     | app.detector:_load_model:73 - 正在加载 YOLO 模型：weights\yolov26_corn_disease.pt，设备：cuda ...
+2026-03-11 17:52:15 | INFO     | app.detector:_load_model:79 - YOLO 模型加载成功 ✅
+2026-03-11 17:52:15 | INFO     | app.main:lifespan:40 - 🌽 Starting Corn AI Disease Detection Backend v1.0.0
+2026-03-11 17:52:15 | INFO     | app.main:lifespan:41 -    YOLO model ready : True
+2026-03-11 17:52:15 | INFO     | app.main:lifespan:42 -    Device           : cuda
+2026-03-11 17:52:15 | INFO     | app.main:lifespan:43 -    Uploads dir      : D:\cornweb\corn-ai-backend\uploads
+2026-03-11 17:56:07 | DEBUG    | app.utils:validate_and_save_upload:50 - Saved uploaded file → D:\cornweb\corn-ai-backend\uploads\b7a94cfcdf7347baa1029988d315d162.jpg
+2026-03-11 17:56:07 | INFO     | app.routes:detect_endpoint:73 - [/detect] Processing image: b7a94cfcdf7347baa1029988d315d162.jpg
+2026-03-11 17:56:08 | INFO     | app.services:run_detection:104 - [run_detection] 1 个目标  |  654.7 ms  |  256x386
+2026-03-11 17:56:15 | INFO     | app.routes:camera_frame_endpoint:166 - [/camera_frame] Processing frame (diagnosis=False)
+2026-03-11 17:56:15 | INFO     | app.services:run_camera_frame:132 - [run_camera_frame] 0 个目标  |  67.9 ms
+2026-03-11 20:43:31 | INFO     | app.detector:_load_model:73 - 正在加载 YOLO 模型：weights\yolov26_corn_disease.pt，设备：cuda ...
+2026-03-11 20:43:31 | INFO     | app.detector:_load_model:79 - YOLO 模型加载成功 ✅
+2026-03-11 20:43:31 | INFO     | app.main:lifespan:40 - 🌽 Starting Corn AI Disease Detection Backend v1.0.0
+2026-03-11 20:43:31 | INFO     | app.main:lifespan:41 -    YOLO model ready : True
+2026-03-11 20:43:31 | INFO     | app.main:lifespan:42 -    Device           : cuda
+2026-03-11 20:43:31 | INFO     | app.main:lifespan:43 -    Uploads dir      : D:\cornweb\corn-ai-backend\uploads
+2026-03-11 20:50:13 | DEBUG    | app.utils:validate_and_save_upload:50 - Saved uploaded file → D:\cornweb\corn-ai-backend\uploads\c9654f023114424980cc888a4f15e606.jpg
+2026-03-11 20:50:13 | INFO     | app.routes:detect_endpoint:73 - [/detect] Processing image: c9654f023114424980cc888a4f15e606.jpg
+2026-03-11 20:50:16 | INFO     | app.services:run_detection:104 - [run_detection] 1 个目标  |  2734.8 ms  |  256x386
+2026-03-12 19:15:49 | INFO     | app.detector:_load_model:73 - 正在加载 YOLO 模型：weights\yolov26_corn_disease.pt，设备：cuda ...
+2026-03-12 19:15:49 | INFO     | app.detector:_load_model:79 - YOLO 模型加载成功 ✅
+2026-03-12 19:15:49 | INFO     | app.main:lifespan:40 - 🌽 Starting Corn AI Disease Detection Backend v1.0.0
+2026-03-12 19:15:49 | INFO     | app.main:lifespan:41 -    YOLO model ready : True
+2026-03-12 19:15:49 | INFO     | app.main:lifespan:42 -    Device           : cuda
+2026-03-12 19:15:49 | INFO     | app.main:lifespan:43 -    Uploads dir      : D:\cornweb\corn-ai-backend\uploads
+2026-04-09 20:32:51 | INFO     | app.detector:_load_model:73 - 正在加载 YOLO 模型：weights\yolov26_corn_disease.pt，设备：cuda ...
+2026-04-09 20:32:51 | INFO     | app.detector:_load_model:79 - YOLO 模型加载成功 ✅
+2026-04-09 20:32:51 | INFO     | app.main:lifespan:40 - 🌽 Starting Corn AI Disease Detection Backend v1.0.0
+2026-04-09 20:32:51 | INFO     | app.main:lifespan:41 -    YOLO model ready : True
+2026-04-09 20:32:51 | INFO     | app.main:lifespan:42 -    Device           : cuda
+2026-04-09 20:32:51 | INFO     | app.main:lifespan:43 -    Uploads dir      : D:\cornweb\corn-ai-backend\uploads

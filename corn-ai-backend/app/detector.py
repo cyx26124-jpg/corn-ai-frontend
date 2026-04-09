@@ -1,186 +1,153 @@
 """
-YOLOv8/v11/v26 Corn Disease Detector
--------------------------------------
-Uses the Ultralytics YOLO API to run inference on corn-leaf images
-and returns structured detection results.
+YOLO model singleton wrapper.
+Exposes predict_frame() used by services.py.
 """
 
 from __future__ import annotations
 
 import threading
 from pathlib import Path
-from typing import Optional
+from typing import Any
 
+import cv2
 import numpy as np
-import torch
 
 from app.config import settings
 from app.logger import app_logger
-from app.schemas import DetectionResult
+
+# ─── 中文标签映射 ──────────────────────────────────────────────────────────────
+DISEASE_NAME_ZH: dict[str, str] = {
+    "Gray_leaf_spot":       "玉米灰斑病",
+    "Leaf_spot":            "玉米叶斑病",
+    "Rust":                 "玉米锈病",
+    "Healthy":              "健康",
+    "gray_leaf_spot":       "玉米灰斑病",
+    "leaf_spot":            "玉米叶斑病",
+    "rust":                 "玉米锈病",
+    "healthy":              "健康",
+    "Common_Rust":          "玉米锈病",
+    "Northern_Leaf_Blight": "玉米叶斑病",
+}
 
 
 class CornDiseaseDetector:
-    """
-    Thread-safe singleton wrapper around the Ultralytics YOLO model.
+    """线程安全的 YOLO 单例包装器。"""
 
-    Usage
-    -----
-    detector = CornDiseaseDetector()
-    results  = detector.detect("path/to/image.jpg")
-    """
-
-    _instance: Optional["CornDiseaseDetector"] = None
+    _instance: "CornDiseaseDetector | None" = None
     _lock = threading.Lock()
 
     def __new__(cls) -> "CornDiseaseDetector":
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    instance = super().__new__(cls)
-                    instance._initialized = False
-                    cls._instance = instance
-        return cls._instance
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = super().__new__(cls)
+                cls._instance._initialized = False
+            return cls._instance
 
-    # ──────────────────────────────────────────────────────────────────────────
-
-    def __init__(self):
+    def __init__(self) -> None:
         if self._initialized:
             return
+        self._model: Any = None
+        self._device: str = "cpu"
+        self._ready: bool = False
         self._initialized = True
-        self.model = None
-        self.device: str = self._resolve_device(settings.YOLO_DEVICE)
         self._load_model()
-
-    # ──────────────────────────────────────────────────────────────────────────
-
-    @staticmethod
-    def _resolve_device(device_setting: str) -> str:
-        if device_setting == "auto":
-            return "cuda" if torch.cuda.is_available() else "cpu"
-        return device_setting
 
     def _load_model(self) -> None:
         model_path = Path(settings.YOLO_MODEL_PATH)
-
         if not model_path.exists():
             app_logger.warning(
-                f"YOLO weight file not found at '{model_path}'. "
-                "Detection will be unavailable until a valid .pt file is placed there."
+                f"权重文件不存在：{model_path}，检测器未就绪。"
             )
             return
 
         try:
-            from ultralytics import YOLO  # lazy import — avoids startup crash if not installed
+            from ultralytics import YOLO
 
-            app_logger.info(f"Loading YOLO model from '{model_path}' on device '{self.device}' …")
-            self.model = YOLO(str(model_path))
-            self.model.to(self.device)
-            app_logger.info("YOLO model loaded successfully.")
+            # 选择设备
+            import torch
+            if settings.YOLO_DEVICE == "auto":
+                self._device = "cuda" if torch.cuda.is_available() else "cpu"
+            else:
+                self._device = settings.YOLO_DEVICE
+
+            app_logger.info(
+                f"正在加载 YOLO 模型：{model_path}，设备：{self._device} ..."
+            )
+            self._model = YOLO(str(model_path))
+            self._model.to(self._device)
+            self._ready = True
+            app_logger.info("YOLO 模型加载成功 ✅")
         except Exception as exc:
-            app_logger.error(f"Failed to load YOLO model: {exc}")
-            self.model = None
+            app_logger.error(f"YOLO 模型加载失败：{exc}")
+            self._ready = False
 
-    # ──────────────────────────────────────────────────────────────────────────
+    # ── 对外属性 ──────────────────────────────────────────────────────────────
 
     @property
     def is_ready(self) -> bool:
-        return self.model is not None
+        return self._ready
 
-    # ──────────────────────────────────────────────────────────────────────────
+    @property
+    def device(self) -> str:
+        return self._device
 
-    def detect(
-        self,
-        source: "str | Path | np.ndarray",
-        conf: Optional[float] = None,
-        iou: Optional[float] = None,
-        imgsz: Optional[int] = None,
-    ) -> list[DetectionResult]:
+    # ── 核心推理 ──────────────────────────────────────────────────────────────
+
+    def predict_frame(self, frame: np.ndarray) -> list[dict]:
         """
-        Run YOLO inference on *source* and return a list of DetectionResult objects.
+        对一帧 BGR numpy 图像运行 YOLO。
 
-        Parameters
-        ----------
-        source  : file path, URL, or numpy array (BGR, HWC)
-        conf    : confidence threshold (defaults to settings value)
-        iou     : IoU threshold for NMS (defaults to settings value)
-        imgsz   : inference image size (defaults to settings value)
+        返回列表，每个元素格式：
+        {
+            "class":    "Gray_leaf_spot",   # 英文原始标签
+            "class_zh": "玉米灰斑病",       # 中文标签
+            "conf":     0.92,
+            "bbox":     [x1, y1, x2, y2],  # 绝对像素坐标
+            "class_id": 0,
+        }
         """
-        if not self.is_ready:
-            app_logger.error("Detector called but model is not loaded.")
+        if not self._ready or self._model is None:
             return []
 
-        conf  = conf  or settings.YOLO_CONFIDENCE_THRESHOLD
-        iou   = iou   or settings.YOLO_IOU_THRESHOLD
-        imgsz = imgsz or settings.YOLO_IMAGE_SIZE
-
         try:
-            results = self.model(
-                source,
-                conf=conf,
-                iou=iou,
-                imgsz=imgsz,
+            results = self._model.predict(
+                source=frame,
+                conf=settings.YOLO_CONFIDENCE_THRESHOLD,
+                save=False,
                 verbose=False,
+                device=self._device,
             )
         except Exception as exc:
-            app_logger.error(f"Inference error: {exc}")
+            app_logger.error(f"[predict_frame] 推理出错：{exc}")
             return []
 
-        return self._parse_results(results)
-
-    # ──────────────────────────────────────────────────────────────────────────
-
-    # 英文类名 → 中文映射
-    DISEASE_NAME_ZH: dict[str, str] = {
-        "Gray_leaf_spot": "玉米灰斑病",
-        "Healthy":        "健康",
-        "Leaf_spot":      "玉米叶斑病",
-        "Rust":           "玉米锈病",
-    }
-
-    @staticmethod
-    def _parse_results(results) -> list[DetectionResult]:
-        """Convert raw Ultralytics Results into DetectionResult schema objects."""
-        detections: list[DetectionResult] = []
-
+        detections: list[dict] = []
         for result in results:
-            names = result.names  # {class_id: class_name}
-
-            if result.boxes is None:
-                continue
-
             for box in result.boxes:
-                class_id   = int(box.cls[0].item())
-                confidence = float(box.conf[0].item())
-                bbox_xyxy  = box.xyxy[0].tolist()   # [x1, y1, x2, y2]
-                en_name    = names.get(class_id, f"class_{class_id}")
-                disease    = CornDiseaseDetector.DISEASE_NAME_ZH.get(en_name, en_name)
+                cls_id    = int(box.cls[0])
+                conf      = float(box.conf[0])
+                label_en  = self._model.names[cls_id]
+                label_zh  = DISEASE_NAME_ZH.get(label_en, label_en)
+                x1, y1, x2, y2 = [float(v) for v in box.xyxy[0]]
 
-                detections.append(
-                    DetectionResult(
-                        disease=disease,
-                        confidence=round(confidence, 4),
-                        bbox=[round(v, 2) for v in bbox_xyxy],
-                        class_id=class_id,
-                    )
-                )
+                detections.append({
+                    "class":    label_en,
+                    "class_zh": label_zh,
+                    "conf":     round(conf, 4),
+                    "bbox":     [round(x1, 2), round(y1, 2),
+                                 round(x2, 2), round(y2, 2)],
+                    "class_id": cls_id,
+                })
 
-        # Sort by confidence descending
-        detections.sort(key=lambda d: d.confidence, reverse=True)
         return detections
 
-    # ──────────────────────────────────────────────────────────────────────────
-
-    def detect_batch(self, sources: list) -> list[list[DetectionResult]]:
-        """Run detection on a batch of images at once (more GPU-efficient)."""
-        if not self.is_ready:
-            return [[] for _ in sources]
-        try:
-            results = self.model(sources, verbose=False)
-            return [self._parse_results([r]) for r in results]
-        except Exception as exc:
-            app_logger.error(f"Batch inference error: {exc}")
-            return [[] for _ in sources]
+    def predict_image_file(self, image_path: str | Path) -> list[dict]:
+        """从文件路径读取图片并推理。"""
+        frame = cv2.imread(str(image_path))
+        if frame is None:
+            raise ValueError(f"无法读取图片：{image_path}")
+        return self.predict_frame(frame)
 
 
-# Module-level singleton — importable directly
+# ── 单例 ──────────────────────────────────────────────────────────────────────
 detector = CornDiseaseDetector()
